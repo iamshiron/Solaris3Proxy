@@ -76,7 +76,11 @@ public sealed partial class CoordinateExtractor(
         var match = CoordinateRegex().Match(text);
         if (!match.Success) return null;
         var parts = match.Value.Split(',');
-        return new Coordinate(int.Parse(parts[0]), int.Parse(parts[1]), int.Parse(parts[2]));
+        // The overlay renders the values in X,Z,Y order — remap to the logical X,Y,Z.
+        return new Coordinate(
+            X: int.Parse(parts[0]),
+            Y: int.Parse(parts[2]),
+            Z: int.Parse(parts[1]));
     }
 
     private static long? ParseUserId(string text) {

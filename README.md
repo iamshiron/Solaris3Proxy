@@ -131,3 +131,18 @@ src/Solaris3Proxy/
 ```bash
 dotnet build --configuration Release
 ```
+
+## License
+
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Shiron.
+
+## Disclaimer
+
+This project is an independent, unofficial, fan-made developer tool. It is **not affiliated with,
+endorsed by, sponsored by, or associated with Kuro Games or Wuthering Waves** in any way.
+
+"Wuthering Waves", "Kuro Games", and all related names, logos, assets, and trademarks are the
+property of their respective owners. Their use here is purely nominative — to describe
+interoperability — and implies no endorsement or partnership. The software is provided "as is" for
+educational and personal use; you are solely responsible for ensuring your use complies with the
+terms of service of any third-party software or game you use it with.

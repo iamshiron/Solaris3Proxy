@@ -101,56 +101,46 @@ public sealed class ScreenCastPortal(ILogger<ScreenCastPortal> logger) : IAsyncD
     }
 
     private MessageBuffer CreateSessionMessage(string token) {
+        var options = new Dictionary<string, VariantValue> {
+            ["handle_token"] = token,
+            ["session_handle_token"] = NewToken(),
+        };
         var writer = _connection!.GetMessageWriter();
         writer.WriteMethodCallHeader(Destination, ObjectPathString, ScreenCastInterface, "CreateSession", "a{sv}", MessageFlags.None);
-        var dict = writer.WriteDictionaryStart();
-        WriteStringEntry(writer, "handle_token", token);
-        WriteStringEntry(writer, "session_handle_token", NewToken());
-        writer.WriteDictionaryEnd(dict);
+        writer.WriteDictionary(options);
         var message = writer.CreateMessage();
         writer.Dispose();
         return message;
     }
 
     private MessageBuffer SelectSourcesMessage(string token, ScreenCaptureOptions options, string? restoreToken) {
+        var arguments = new Dictionary<string, VariantValue> {
+            ["handle_token"] = token,
+            ["types"] = 1u,                   // MONITOR
+            ["cursor_mode"] = options.CursorMode,
+            ["persist_mode"] = 2u,            // persistent — enables restore tokens
+        };
+        if (!string.IsNullOrEmpty(restoreToken)) arguments["restore_token"] = restoreToken;
+
         var writer = _connection!.GetMessageWriter();
         writer.WriteMethodCallHeader(Destination, ObjectPathString, ScreenCastInterface, "SelectSources", "oa{sv}", MessageFlags.None);
         writer.WriteObjectPath(_session);
-        var dict = writer.WriteDictionaryStart();
-        WriteStringEntry(writer, "handle_token", token);
-        WriteUInt32Entry(writer, "types", 1u);          // MONITOR
-        WriteUInt32Entry(writer, "cursor_mode", options.CursorMode);
-        WriteUInt32Entry(writer, "persist_mode", 2u);   // persistent — enables restore tokens
-        if (!string.IsNullOrEmpty(restoreToken)) WriteStringEntry(writer, "restore_token", restoreToken);
-        writer.WriteDictionaryEnd(dict);
+        writer.WriteDictionary(arguments);
         var message = writer.CreateMessage();
         writer.Dispose();
         return message;
     }
 
     private MessageBuffer StartMessage(string token) {
+        var options = new Dictionary<string, VariantValue> { ["handle_token"] = token };
         var writer = _connection!.GetMessageWriter();
         writer.WriteMethodCallHeader(Destination, ObjectPathString, ScreenCastInterface, "Start", "osa{sv}", MessageFlags.None);
         writer.WriteObjectPath(_session);
         writer.WriteString(string.Empty); // parent_window
-        var dict = writer.WriteDictionaryStart();
-        WriteStringEntry(writer, "handle_token", token);
-        writer.WriteDictionaryEnd(dict);
+        writer.WriteDictionary(options);
         var message = writer.CreateMessage();
         writer.Dispose();
         return message;
-    }
-
-    private static void WriteStringEntry(MessageWriter writer, string key, string value) {
-        writer.WriteDictionaryEntryStart();
-        writer.WriteString(key);
-        writer.WriteVariantString(value);
-    }
-
-    private static void WriteUInt32Entry(MessageWriter writer, string key, uint value) {
-        writer.WriteDictionaryEntryStart();
-        writer.WriteString(key);
-        writer.WriteVariantUInt32(value);
     }
 
     private static string NewToken() => "s3p_" + Guid.NewGuid().ToString("N")[..12];

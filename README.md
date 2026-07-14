@@ -141,6 +141,20 @@ Released under the [MIT License](LICENSE). Copyright (c) 2026 Shiron.
 This project is an independent, unofficial, fan-made developer tool. It is **not affiliated with,
 endorsed by, sponsored by, or associated with Kuro Games or Wuthering Waves** in any way.
 
+### Where this software sits
+
+Technically this is a form of *automation* — it continuously reads your coordinates from the
+screen. But it only ever **looks at pixels the compositor already shows you**, exactly like a
+screen recorder. It explicitly does **not**:
+
+- modify any game files,
+- read or write any process/game memory (RAM),
+- inject into, hook, or attach to any process,
+- send inputs, clicks, or run any commands on your behalf.
+
+At its core it is a **smart screen recorder** that turns a region of your display into text served
+over HTTP. What you do with that data is up to you.
+
 "Wuthering Waves", "Kuro Games", and all related names, logos, assets, and trademarks are the
 property of their respective owners. Their use here is purely nominative — to describe
 interoperability — and implies no endorsement or partnership. The software is provided "as is" for

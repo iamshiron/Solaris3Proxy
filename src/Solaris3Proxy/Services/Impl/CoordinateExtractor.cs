@@ -13,10 +13,15 @@ namespace Shiron.Solaris3Proxy.Services.Impl;
 /// </summary>
 public sealed partial class CoordinateExtractor(
     IOptions<CoordinateExtractionOptions> options,
-    ILogger<CoordinateExtractor> logger) : ICoordinateExtractor {
+    ILogger<CoordinateExtractor> logger) : ICoordinateExtractor, IDisposable {
     private const string CharacterWhitelist = "-0123456789,";
 
     private readonly CoordinateExtractionOptions _options = options.Value;
+
+    // Tesseract engines are not thread-safe; a single cached engine guarded by this lock avoids
+    // reloading the trained data on every call (the worker runs OCR continuously).
+    private readonly Lock _ocrGate = new();
+    private TesseractEngine? _engine;
 
     /// <summary>Matches a coordinate triplet <c>X,Y,Z</c> where each value may be negative.</summary>
     [GeneratedRegex(@"-?\d+,-?\d+,-?\d+", RegexOptions.CultureInvariant)]
@@ -27,18 +32,19 @@ public sealed partial class CoordinateExtractor(
         try {
             var processed = Preprocess(imageBytes);
 
-            using var engine = new TesseractEngine(_options.TessDataPath, _options.Language, EngineMode.Default);
-            engine.SetVariable("tessedit_char_whitelist", CharacterWhitelist);
-
-            using var pix = Pix.LoadFromMemory(processed);
-            using var page = engine.Process(pix, PageSegMode.SingleLine);
-
-            var rawText = page.GetText().Trim();
-            var confidence = page.GetMeanConfidence();
+            string rawText;
+            float confidence;
+            lock (_ocrGate) {
+                var engine = _engine ??= CreateEngine();
+                using var pix = Pix.LoadFromMemory(processed);
+                using var page = engine.Process(pix, PageSegMode.SingleLine);
+                rawText = page.GetText().Trim();
+                confidence = page.GetMeanConfidence();
+            }
 
             var match = CoordinateRegex().Match(rawText);
             if (!match.Success) {
-                logger.LogWarning("No coordinate found in OCR output '{RawText}'.", rawText);
+                logger.LogDebug("No coordinate found in OCR output '{RawText}'.", rawText);
                 return new CoordinateExtractionResult(false, null, rawText, confidence, "No coordinate found in image.");
             }
 
@@ -52,6 +58,20 @@ public sealed partial class CoordinateExtractor(
         } catch (Exception ex) {
             logger.LogError(ex, "Coordinate extraction failed.");
             return new CoordinateExtractionResult(false, null, string.Empty, 0f, ex.Message);
+        }
+    }
+
+    private TesseractEngine CreateEngine() {
+        var engine = new TesseractEngine(_options.TessDataPath, _options.Language, EngineMode.Default);
+        engine.SetVariable("tessedit_char_whitelist", CharacterWhitelist);
+        return engine;
+    }
+
+    /// <inheritdoc/>
+    public void Dispose() {
+        lock (_ocrGate) {
+            _engine?.Dispose();
+            _engine = null;
         }
     }
 

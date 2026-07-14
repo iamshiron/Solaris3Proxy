@@ -4,17 +4,21 @@ using Shiron.Solaris3Proxy.Infrastructure;
 using Shiron.Solaris3Proxy.Options;
 using Shiron.Solaris3Proxy.Services;
 using Shiron.Solaris3Proxy.Services.Impl;
+using Shiron.Solaris3Proxy.Services.Screen;
+using Shiron.Solaris3Proxy.Services.Screen.Impl;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.Configure<CalculationOptions>(
-    builder.Configuration.GetSection(CalculationOptions.SectionName));
 builder.Services.Configure<CoordinateExtractionOptions>(
     builder.Configuration.GetSection(CoordinateExtractionOptions.SectionName));
+builder.Services.Configure<ScreenCaptureOptions>(
+    builder.Configuration.GetSection(ScreenCaptureOptions.SectionName));
 
-builder.Services.AddSingleton<ICalculationStore, CalculationStore>();
-builder.Services.AddHostedService<CalculationWorker>();
 builder.Services.AddSingleton<ICoordinateExtractor, CoordinateExtractor>();
+builder.Services.AddSingleton<ICoordinateStore, CoordinateStore>();
+builder.Services.AddSingleton<IScreenCapturerFactory, ScreenCapturerFactory>();
+builder.Services.AddSingleton<IScreenCapturer>(sp => sp.GetRequiredService<IScreenCapturerFactory>().Create());
+builder.Services.AddHostedService<CoordinateCaptureWorker>();
 
 builder.Services.AddOpenApi();
 
@@ -31,7 +35,6 @@ if (app.Environment.IsDevelopment()) {
     });
 }
 
-app.MapCalculationEndpoints();
 app.MapCoordinateEndpoints();
 
 app.Run();

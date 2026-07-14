@@ -22,3 +22,20 @@ public sealed record CoordinateExtractionResult(
     string RawText,
     float Confidence,
     string? Error);
+
+/// <summary>
+/// The most recent coordinate extracted from the live screen capture.
+/// </summary>
+/// <param name="CapturedAt">UTC time the source frame was captured.</param>
+/// <param name="ExtractedAt">UTC time the extraction completed.</param>
+/// <param name="Success">Whether a coordinate was parsed from the frame.</param>
+/// <param name="Coordinate">The extracted coordinate, or <c>null</c> when none was found.</param>
+/// <param name="Confidence">Mean OCR confidence in the range [0, 1].</param>
+/// <param name="RawText">The raw OCR text (for diagnostics).</param>
+public sealed record CoordinateSnapshot(
+    DateTime CapturedAt,
+    DateTime ExtractedAt,
+    bool Success,
+    Coordinate? Coordinate,
+    float Confidence,
+    string RawText);

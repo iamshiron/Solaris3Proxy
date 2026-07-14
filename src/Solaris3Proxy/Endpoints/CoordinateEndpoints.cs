@@ -5,12 +5,19 @@ using Shiron.Solaris3Proxy.Services;
 namespace Shiron.Solaris3Proxy.Endpoints;
 
 /// <summary>
-/// HTTP endpoints for extracting coordinates from uploaded images.
+/// HTTP endpoints for coordinate extraction: the live value from the continuous screen capture,
+/// and a one-off extraction from an uploaded image (useful for testing the pipeline).
 /// </summary>
 public static class CoordinateEndpoints {
     /// <summary>Maps the coordinate endpoints under <c>/api/coordinates</c>.</summary>
     public static void MapCoordinateEndpoints(this IEndpointRouteBuilder app) {
         var group = app.MapGroup("/api/coordinates").WithTags("Coordinates");
+
+        group.MapGet("/latest", (ICoordinateStore store) =>
+                store.Latest is { } snapshot
+                    ? Results.Ok(snapshot)
+                    : Results.NoContent())
+            .WithName("GetLatestCoordinate");
 
         group.MapPost("/extract", async (
                 IFormFile image,

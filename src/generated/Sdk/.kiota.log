@@ -1,0 +1,7 @@
+Warning: KiotaBuilder OpenAPI warning: #/components/schemas/Coordinate/properties/x - The format int32 is not supported by Kiota for the type Integer, String and the string type will be used.
+Warning: KiotaBuilder OpenAPI warning: #/components/schemas/Coordinate/properties/y - The format int32 is not supported by Kiota for the type Integer, String and the string type will be used.
+Warning: KiotaBuilder OpenAPI warning: #/components/schemas/Coordinate/properties/z - The format int32 is not supported by Kiota for the type Integer, String and the string type will be used.
+Warning: KiotaBuilder OpenAPI warning: #/components/schemas/CoordinateExtractionResult/properties/userId - The format int64 is not supported by Kiota for the type Integer, String and the string type will be used.
+Warning: KiotaBuilder OpenAPI warning: #/components/schemas/CoordinateExtractionResult/properties/confidence - The format float is not supported by Kiota for the type Number, String and the string type will be used.
+Warning: KiotaBuilder OpenAPI warning: #/components/schemas/CoordinateSnapshot/properties/userId - The format int64 is not supported by Kiota for the type Integer, String and the string type will be used.
+Warning: KiotaBuilder OpenAPI warning: #/components/schemas/CoordinateSnapshot/properties/confidence - The format float is not supported by Kiota for the type Number, String and the string type will be used.

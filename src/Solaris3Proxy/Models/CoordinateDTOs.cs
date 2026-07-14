@@ -8,6 +8,10 @@ namespace Shiron.Solaris3Proxy.Models;
 /// <param name="Z">The Z component.</param>
 public sealed record Coordinate(int X, int Y, int Z);
 
+/// <summary>A simple error payload returned by endpoints on a bad request.</summary>
+/// <param name="Error">A human-readable error message.</param>
+public sealed record ApiError(string Error);
+
 /// <summary>
 /// Result of attempting to extract the coordinate and user ID from an image.
 /// </summary>

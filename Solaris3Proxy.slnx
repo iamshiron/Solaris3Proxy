@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/Solaris3Proxy/Shiron.Solaris3Proxy.csproj" />
   </Folder>
+  <Folder Name="/src/generated/">
+    <Project Path="src/generated/Sdk/Shiron.Solaris3Proxy.Sdk.csproj" />
+  </Folder>
 </Solution>

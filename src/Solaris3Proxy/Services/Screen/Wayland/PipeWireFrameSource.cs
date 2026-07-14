@@ -39,10 +39,15 @@ public sealed class PipeWireFrameSource(ILogger<PipeWireFrameSource> logger) : I
 
         _process = Process.Start(startInfo)
             ?? throw new InvalidOperationException("Failed to start gst-launch-1.0.");
+        _process.EnableRaisingEvents = true;
         _process.ErrorDataReceived += (_, e) => { if (e.Data is { Length: > 0 }) logger.LogDebug("gst: {Line}", e.Data); };
+        _process.Exited += (_, _) => {
+            if (_process is { ExitCode: not 0 } p)
+                logger.LogWarning("Capture pipeline (gst-launch-1.0) exited unexpectedly with code {Code}.", p.ExitCode);
+        };
         _process.BeginErrorReadLine();
 
-        logger.LogInformation("Capture pipeline started for PipeWire node {NodeId} at {Fps} fps.", nodeId, fps);
+        logger.LogInformation("Capture pipeline started: gst-launch-1.0 {Args}", arguments);
     }
 
     /// <summary>Returns the newest fully-written PNG frame, or <c>null</c> when none is available yet.</summary>

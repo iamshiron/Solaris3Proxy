@@ -30,13 +30,19 @@ public sealed class WaylandPortalScreenCapturer(
 
         Directory.CreateDirectory(frameDirectory);
         var restoreToken = ReadRestoreToken(restoreTokenPath);
+        logger.LogInformation("Starting Wayland screen capture. frameDir={FrameDir}, restoreToken={HasToken}.",
+            frameDirectory, restoreToken is { Length: > 0 });
 
         _portal = new ScreenCastPortal(loggerFactory.CreateLogger<ScreenCastPortal>());
         var stream = await _portal.StartAsync(_options, restoreToken, cancellationToken);
-        if (stream.RestoreToken is { Length: > 0 } token) WriteRestoreToken(restoreTokenPath, token);
+        if (stream.RestoreToken is { Length: > 0 } token) {
+            WriteRestoreToken(restoreTokenPath, token);
+            logger.LogInformation("Saved portal restore token to {Path} (future starts won't prompt).", restoreTokenPath);
+        }
 
         _frameSource = new PipeWireFrameSource(loggerFactory.CreateLogger<PipeWireFrameSource>());
         _frameSource.Start(stream.NodeId, _options.FrameRate, frameDirectory);
+        logger.LogInformation("Wayland screen capture started.");
     }
 
     /// <inheritdoc/>

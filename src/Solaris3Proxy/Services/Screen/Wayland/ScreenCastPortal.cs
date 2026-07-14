@@ -38,20 +38,23 @@ public sealed class ScreenCastPortal(ILogger<ScreenCastPortal> logger) : IAsyncD
         await connection.ConnectAsync();
         _connection = connection;
         _sender = connection.UniqueName!.TrimStart(':').Replace('.', '_');
+        logger.LogInformation("Connected to session bus as {UniqueName}; starting ScreenCast portal handshake.", connection.UniqueName);
 
         var createResults = await CallAsync(CreateSessionMessage, cancellationToken, HandshakeTimeout);
         _session = new ObjectPath(createResults["session_handle"].GetString());
         _sessionOpen = true;
-        logger.LogInformation("ScreenCast portal session created.");
+        logger.LogInformation("Step 1/3 CreateSession OK: session={Session}.", _session.ToString());
 
+        logger.LogInformation("Step 2/3 SelectSources (types=MONITOR, cursor_mode={CursorMode}, restore_token={HasToken}).",
+            options.CursorMode, restoreToken is { Length: > 0 });
         await CallAsync(token => SelectSourcesMessage(token, options, restoreToken), cancellationToken, HandshakeTimeout);
 
-        logger.LogInformation("Awaiting screen-share consent (up to {Timeout}s)...", options.ConsentTimeoutSeconds);
+        logger.LogInformation("Step 3/3 Start: awaiting screen-share consent dialog (up to {Timeout}s) — approve it to begin capture.", options.ConsentTimeoutSeconds);
         var startResults = await CallAsync(StartMessage, cancellationToken, TimeSpan.FromSeconds(options.ConsentTimeoutSeconds));
 
         var nodeId = ParseFirstNodeId(startResults);
         var newToken = startResults.TryGetValue("restore_token", out var rt) ? rt.GetString() : null;
-        logger.LogInformation("Screen-share granted; PipeWire node {NodeId}.", nodeId);
+        logger.LogInformation("Screen-share granted; PipeWire node={NodeId}, restore_token={HasToken}.", nodeId, newToken is { Length: > 0 });
 
         return new ScreenCastStream(nodeId, newToken);
     }
@@ -72,16 +75,20 @@ public sealed class ScreenCastPortal(ILogger<ScreenCastPortal> logger) : IAsyncD
         };
 
         // Subscribe (awaited) before issuing the call so the Response can never be missed.
+        // NB: Notification.Exception throws unless the notification is a completion — only ever
+        // touch it after checking HasValue/IsCompletion, otherwise valid responses are lost.
         var registration = await connection.AddMatchAsync(rule, ReadResponse,
             (Notification<(uint code, Dictionary<string, VariantValue> results)> notification) => {
-                if (notification.Exception is not null) completion.TrySetException(notification.Exception);
-                else if (notification.Value.code != 0) completion.TrySetException(
-                    new InvalidOperationException($"Portal request was cancelled or failed (code {notification.Value.code})."));
-                else completion.TrySetResult(notification.Value.results);
+                if (!notification.HasValue) return; // disposal / reader-failure notification
+                var (code, results) = notification.Value;
+                if (code != 0) completion.TrySetException(
+                    new InvalidOperationException($"Portal request was cancelled or failed (code {code})."));
+                else completion.TrySetResult(results);
             },
-            emitOnCapturedContext: false, ObserverFlags.EmitOnReaderFailed, null);
+            emitOnCapturedContext: false, ObserverFlags.None, null);
         _registrations.Add(registration);
 
+        logger.LogDebug("Portal call sent; awaiting Response at {RequestPath}.", requestPath);
         await connection.CallMethodAsync(messageFactory(token), static (Message m, object? s) => m.GetBodyReader().ReadObjectPath(), null);
 
         var responseTask = timeout is { } t ? completion.Task.WaitAsync(t, cancellationToken) : completion.Task.WaitAsync(cancellationToken);

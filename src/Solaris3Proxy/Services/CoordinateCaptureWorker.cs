@@ -25,10 +25,20 @@ public sealed class CoordinateCaptureWorker(
 
         using var timer = new PeriodicTimer(interval);
         try {
+            var sawFrame = false;
+            var sawCoordinate = false;
             do {
                 if (!capturer.TryGetLatestFrame(out var frame)) continue;
+                if (!sawFrame) {
+                    sawFrame = true;
+                    logger.LogInformation("Receiving capture frames ({Bytes} bytes); extracting coordinates.", frame.Data.Length);
+                }
 
                 var result = extractor.Extract(frame.Data);
+                if (result.Success && !sawCoordinate) {
+                    sawCoordinate = true;
+                    logger.LogInformation("First coordinate extracted: {Coordinate}.", result.Coordinate);
+                }
                 store.Update(new CoordinateSnapshot(
                     CapturedAt: frame.CapturedAt,
                     ExtractedAt: DateTime.UtcNow,

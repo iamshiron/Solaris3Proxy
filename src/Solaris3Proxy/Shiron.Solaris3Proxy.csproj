@@ -12,6 +12,9 @@
     <!-- Pin transitive Microsoft.OpenApi to a non-vulnerable version. -->
     <PackageReference Include="Microsoft.OpenApi" />
     <PackageReference Include="Scalar.AspNetCore" />
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" />
+    <PackageReference Include="Tesseract" />
   </ItemGroup>
 
 </Project>

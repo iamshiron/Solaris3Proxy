@@ -63,3 +63,6 @@ maps.json
 
 # Local docs symlink
 /doc
+
+# Local test fixtures (screenshots, sample images)
+/test

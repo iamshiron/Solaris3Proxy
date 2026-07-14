@@ -35,7 +35,14 @@ public sealed class CoordinateCaptureWorker(
                 }
 
                 var result = extractor.Extract(frame.Data);
-                if (result.Success && !sawCoordinate) {
+                if (!result.Success) {
+                    // Couldn't read a valid X,Y,Z from this frame — discard it and keep the
+                    // last good value; wait for the next frame rather than publishing a miss.
+                    logger.LogDebug("Discarded frame (no valid coordinate): {Error}", result.Error);
+                    continue;
+                }
+
+                if (!sawCoordinate) {
                     sawCoordinate = true;
                     logger.LogInformation("First coordinate extracted: {Coordinate}.", result.Coordinate);
                 }

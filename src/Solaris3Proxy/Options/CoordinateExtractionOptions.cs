@@ -25,6 +25,18 @@ public sealed class CoordinateExtractionOptions {
     /// <summary>Bottom edge of the crop region as a fraction of image height (1437 / 1440).</summary>
     public double RelativeBottom { get; set; } = 0.9979166667;
 
+    /// <summary>Left edge of the user-ID crop region as a fraction of image width (2256 / 2560).</summary>
+    public double UserIdRelativeLeft { get; set; } = 0.8812500000;
+
+    /// <summary>Top edge of the user-ID crop region as a fraction of image height (1405 / 1440).</summary>
+    public double UserIdRelativeTop { get; set; } = 0.9756944444;
+
+    /// <summary>Right edge of the user-ID crop region as a fraction of image width (2500 / 2560).</summary>
+    public double UserIdRelativeRight { get; set; } = 0.9765625000;
+
+    /// <summary>Bottom edge of the user-ID crop region as a fraction of image height (1440 / 1440).</summary>
+    public double UserIdRelativeBottom { get; set; } = 1.0000000000;
+
     /// <summary>
     /// Luminance cutoff [0, 255]. Pixels brighter than this become text (black); the text is a
     /// slightly-transparent light color over a darker background, so a mid-low cutoff isolates it.

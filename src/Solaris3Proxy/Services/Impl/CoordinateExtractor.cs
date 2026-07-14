@@ -8,13 +8,20 @@ using Tesseract;
 namespace Shiron.Solaris3Proxy.Services.Impl;
 
 /// <summary>
-/// Extracts coordinates by cropping the configured relative region with Skia, binarizing it,
-/// and running Tesseract OCR restricted to the coordinate character set.
+/// Extracts the coordinate and user ID by cropping both configured relative regions with Skia,
+/// binarizing them, compositing them into a single image, and running one Tesseract OCR pass
+/// restricted to the characters both fields use.
 /// </summary>
 public sealed partial class CoordinateExtractor(
     IOptions<CoordinateExtractionOptions> options,
     ILogger<CoordinateExtractor> logger) : ICoordinateExtractor, IDisposable {
-    private const string CharacterWhitelist = "-0123456789,";
+    // Union of the characters used by the coordinate (digits, comma, minus) and the
+    // "User ID: <n>" label (letters, colon, space). Keeping one whitelist lets both regions
+    // share a single OCR pass.
+    private const string CharacterWhitelist = "-,:0123456789 UserID";
+
+    // Vertical gap (px) between the two stacked regions so OCR treats them as separate lines.
+    private const int RegionGap = 30;
 
     private readonly CoordinateExtractionOptions _options = options.Value;
 
@@ -27,6 +34,10 @@ public sealed partial class CoordinateExtractor(
     [GeneratedRegex(@"-?\d+,-?\d+,-?\d+", RegexOptions.CultureInvariant)]
     private static partial Regex CoordinateRegex();
 
+    /// <summary>Matches the <c>User ID: &lt;digits&gt;</c> label and captures the numeric id.</summary>
+    [GeneratedRegex(@"User\s*ID\s*:?\s*(\d+)", RegexOptions.CultureInvariant | RegexOptions.IgnoreCase)]
+    private static partial Regex UserIdRegex();
+
     /// <inheritdoc/>
     public CoordinateExtractionResult Extract(byte[] imageBytes) {
         try {
@@ -37,28 +48,40 @@ public sealed partial class CoordinateExtractor(
             lock (_ocrGate) {
                 var engine = _engine ??= CreateEngine();
                 using var pix = Pix.LoadFromMemory(processed);
-                using var page = engine.Process(pix, PageSegMode.SingleLine);
+                using var page = engine.Process(pix, PageSegMode.SingleBlock);
                 rawText = page.GetText().Trim();
                 confidence = page.GetMeanConfidence();
             }
 
-            var match = CoordinateRegex().Match(rawText);
-            if (!match.Success) {
-                logger.LogDebug("No coordinate found in OCR output '{RawText}'.", rawText);
-                return new CoordinateExtractionResult(false, null, rawText, confidence, "No coordinate found in image.");
+            var coordinate = ParseCoordinate(rawText);
+            var userId = ParseUserId(rawText);
+            if (coordinate is null || userId is null) {
+                var error = (coordinate, userId) switch {
+                    (null, null) => "No coordinate or user ID found in image.",
+                    (null, _) => "No coordinate found in image.",
+                    _ => "No user ID found in image.",
+                };
+                logger.LogDebug("Incomplete extraction from OCR output '{RawText}'.", rawText);
+                return new CoordinateExtractionResult(false, coordinate, userId, rawText, confidence, error);
             }
 
-            var parts = match.Value.Split(',');
-            var coordinate = new Coordinate(
-                int.Parse(parts[0]),
-                int.Parse(parts[1]),
-                int.Parse(parts[2]));
-
-            return new CoordinateExtractionResult(true, coordinate, rawText, confidence, null);
+            return new CoordinateExtractionResult(true, coordinate, userId, rawText, confidence, null);
         } catch (Exception ex) {
             logger.LogError(ex, "Coordinate extraction failed.");
-            return new CoordinateExtractionResult(false, null, string.Empty, 0f, ex.Message);
+            return new CoordinateExtractionResult(false, null, null, string.Empty, 0f, ex.Message);
         }
+    }
+
+    private static Coordinate? ParseCoordinate(string text) {
+        var match = CoordinateRegex().Match(text);
+        if (!match.Success) return null;
+        var parts = match.Value.Split(',');
+        return new Coordinate(int.Parse(parts[0]), int.Parse(parts[1]), int.Parse(parts[2]));
+    }
+
+    private static long? ParseUserId(string text) {
+        var match = UserIdRegex().Match(text);
+        return match.Success && long.TryParse(match.Groups[1].Value, out var id) ? id : null;
     }
 
     private TesseractEngine CreateEngine() {
@@ -76,18 +99,43 @@ public sealed partial class CoordinateExtractor(
     }
 
     /// <summary>
-    /// Crops the configured relative region, upscales it, and binarizes it (dark text on white)
-    /// so the semi-transparent overlay text is legible to Tesseract. Returns PNG-encoded bytes.
+    /// Renders both regions (coordinate and user ID) as binarized images and stacks them into a
+    /// single PNG so one OCR pass covers both. Returns PNG-encoded bytes.
     /// </summary>
     private byte[] Preprocess(byte[] imageBytes) {
         using var original = SKBitmap.Decode(imageBytes)
             ?? throw new InvalidOperationException("Unsupported or corrupt image.");
 
-        var rect = ResolveCropRect(original.Width, original.Height);
+        using var coordinateRegion = RenderRegion(original,
+            _options.RelativeLeft, _options.RelativeTop, _options.RelativeRight, _options.RelativeBottom);
+        using var userIdRegion = RenderRegion(original,
+            _options.UserIdRelativeLeft, _options.UserIdRelativeTop, _options.UserIdRelativeRight, _options.UserIdRelativeBottom);
+
+        var width = Math.Max(coordinateRegion.Width, userIdRegion.Width);
+        var height = coordinateRegion.Height + RegionGap + userIdRegion.Height;
+
+        using var composite = new SKBitmap(width, height);
+        using (var canvas = new SKCanvas(composite)) {
+            canvas.Clear(SKColors.White);
+            canvas.DrawBitmap(coordinateRegion,
+                new SKRect(0, 0, coordinateRegion.Width, coordinateRegion.Height), new SKSamplingOptions(), null);
+            var top = coordinateRegion.Height + RegionGap;
+            canvas.DrawBitmap(userIdRegion,
+                new SKRect(0, top, userIdRegion.Width, top + userIdRegion.Height), new SKSamplingOptions(), null);
+        }
+
+        using var image = SKImage.FromBitmap(composite);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
+    }
+
+    /// <summary>Crops the given relative region, upscales it, and binarizes it (dark text on white).</summary>
+    private SKBitmap RenderRegion(SKBitmap original, double relLeft, double relTop, double relRight, double relBottom) {
+        var rect = ResolveCropRect(original.Width, original.Height, relLeft, relTop, relRight, relBottom);
 
         using var cropped = new SKBitmap(rect.Width, rect.Height);
         if (!original.ExtractSubset(cropped, rect))
-            throw new InvalidOperationException("Failed to crop the coordinate region.");
+            throw new InvalidOperationException("Failed to crop the extraction region.");
 
         var scale = Math.Max(1, _options.UpscaleFactor);
         var width = rect.Width * scale;
@@ -99,7 +147,7 @@ public sealed partial class CoordinateExtractor(
                 new SKSamplingOptions(SKCubicResampler.Mitchell), null);
         }
 
-        using var binary = new SKBitmap(new SKImageInfo(width, height, SKColorType.Gray8, SKAlphaType.Opaque));
+        var binary = new SKBitmap(new SKImageInfo(width, height, SKColorType.Gray8, SKAlphaType.Opaque));
         var threshold = _options.LuminanceThreshold;
         for (var y = 0; y < height; y++) {
             for (var x = 0; x < width; x++) {
@@ -111,17 +159,16 @@ public sealed partial class CoordinateExtractor(
             }
         }
 
-        using var image = SKImage.FromBitmap(binary);
-        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-        return data.ToArray();
+        return binary;
     }
 
-    /// <summary>Resolves the pixel crop rectangle from the relative bounds, clamped to the image.</summary>
-    private SKRectI ResolveCropRect(int imageWidth, int imageHeight) {
-        var left = (int) Math.Round(_options.RelativeLeft * imageWidth);
-        var top = (int) Math.Round(_options.RelativeTop * imageHeight);
-        var right = (int) Math.Round(_options.RelativeRight * imageWidth);
-        var bottom = (int) Math.Round(_options.RelativeBottom * imageHeight);
+    /// <summary>Resolves a pixel crop rectangle from relative bounds, clamped to the image.</summary>
+    private static SKRectI ResolveCropRect(int imageWidth, int imageHeight,
+        double relLeft, double relTop, double relRight, double relBottom) {
+        var left = (int) Math.Round(relLeft * imageWidth);
+        var top = (int) Math.Round(relTop * imageHeight);
+        var right = (int) Math.Round(relRight * imageWidth);
+        var bottom = (int) Math.Round(relBottom * imageHeight);
 
         left = Math.Clamp(left, 0, imageWidth - 1);
         top = Math.Clamp(top, 0, imageHeight - 1);

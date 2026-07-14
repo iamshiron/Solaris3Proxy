@@ -19,6 +19,12 @@ public static class CoordinateEndpoints {
                     : Results.NoContent())
             .WithName("GetLatestCoordinate");
 
+        group.MapGet("/latest/image", (ICoordinateStore store) =>
+                store.LatestImage is { } png
+                    ? Results.File(png, "image/png")
+                    : Results.NoContent())
+            .WithName("GetLatestImage");
+
         group.MapPost("/extract", async (
                 IFormFile image,
                 ICoordinateExtractor extractor,

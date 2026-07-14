@@ -36,23 +36,24 @@ public sealed class CoordinateCaptureWorker(
 
                 var result = extractor.Extract(frame.Data);
                 if (!result.Success) {
-                    // Couldn't read a valid X,Y,Z from this frame — discard it and keep the
-                    // last good value; wait for the next frame rather than publishing a miss.
-                    logger.LogDebug("Discarded frame (no valid coordinate): {Error}", result.Error);
+                    // Couldn't read a valid coordinate + user ID from this frame — discard it and
+                    // keep the last good value; wait for the next frame rather than publishing a miss.
+                    logger.LogDebug("Discarded frame (invalid extraction): {Error}", result.Error);
                     continue;
                 }
 
                 if (!sawCoordinate) {
                     sawCoordinate = true;
-                    logger.LogInformation("First coordinate extracted: {Coordinate}.", result.Coordinate);
+                    logger.LogInformation("First extraction: {Coordinate}, UserId={UserId}.", result.Coordinate, result.UserId);
                 }
                 store.Update(new CoordinateSnapshot(
                     CapturedAt: frame.CapturedAt,
                     ExtractedAt: DateTime.UtcNow,
                     Success: result.Success,
                     Coordinate: result.Coordinate,
+                    UserId: result.UserId,
                     Confidence: result.Confidence,
-                    RawText: result.RawText));
+                    RawText: result.RawText), frame.Data);
             } while (await timer.WaitForNextTickAsync(stoppingToken));
         } catch (OperationCanceledException) {
             // Graceful shutdown.
